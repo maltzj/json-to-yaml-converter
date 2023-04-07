@@ -62,7 +62,6 @@ fn convert_to_yaml_string_internal(serde: &Value) -> String {
         }
         Value::Array(vector) => {
             if vector.len() == 0 {
-                println!("hitting base case");
                 result.push_str("[]");
             } else {
                 for value in vector {
