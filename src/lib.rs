@@ -64,39 +64,47 @@ fn convert_to_yaml_string_internal(serde: &Value) -> String {
             if vector.len() == 0 {
                 result.push_str("[]");
             } else {
-                for value in vector {
-                    let internal_string = match value {
-                        Value::Bool(_) | Value::Number(_) | Value::String(_) => {
-                            convert_to_yaml_string_internal(&value)
-                        }
-                        Value::Array(ref internal_vector) => {
-                            let sub_result = convert_to_yaml_string_internal(&value);
-                            let mut final_result = String::from("");
-                            for row in sub_result.split("\n") {
-                                // Split appears to add an empty element at the end, so ignore
-                                // that.
-                                if row.len() != 0 {
-                                    final_result.push_str(&format!("  {}\n", row));
-                                }
-                            }
-
-                            final_result.drain(..2);
-                            final_result
-                        }
-                        _ => {
-                            panic!("panicking");
-                            "".to_string()
-                        }
-                    };
-                    result.push_str(&format!("- {}", &internal_string));
-                }
+               result.push_str(&generate_string_for_array(&vector));
             }
         }
         _ => (),
     }
-    println!("Attaching newline");
     result.push_str("\n");
     result
+}
+
+fn generate_string_for_array(vector: &Vec<Value>) -> String {
+    let mut internal_result = String::from("");
+    for value in vector {
+        let internal_string = match value {
+            Value::Bool(_) | Value::Number(_) | Value::String(_) => {
+                convert_to_yaml_string_internal(&value)
+            }
+            Value::Array(ref internal_vector) => {
+                let sub_result = convert_to_yaml_string_internal(&value);
+                let mut final_result = String::from("");
+                // Do some formatting on the internals of the array so that everything lines up
+                // nicely.
+                for row in sub_result.split("\n") {
+                    // Split appears to add an empty element at the end, so ignore
+                    // that.
+                    if row.len() != 0 {
+                        final_result.push_str(&format!("  {}\n", row));
+                    }
+                }
+
+                final_result.drain(..2);
+                final_result
+            }
+            _ => {
+                panic!("panicking");
+                "".to_string()
+            }
+        };
+        internal_result.push_str(&format!("- {}", &internal_string));
+    }
+
+    internal_result
 }
 
 // TODO: Do I want to write some test which round trips these two things and asserts that they're
