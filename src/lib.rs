@@ -64,16 +64,20 @@ fn convert_to_yaml_string_internal(serde: Value) -> String {
                 match value {
                     Value::Bool(_) | Value::Number(_) | Value::String(_) => {
                         let sub_result = convert_to_yaml_string_internal(value);
-                        result.push_str(&format!("-  {}", sub_result));
+                        result.push_str(&format!("- {}", sub_result));
                     }
                     Value::Array(_) => {
+                        // TODO: handle edge case of an array being empty
                         let sub_result = convert_to_yaml_string_internal(value);
                         let mut final_result = String::from("");
+
                         for row in sub_result.split("\n") {
                             final_result.push_str(&format!("  {}", row));
                         }
 
-                        final_result.insert_str(0, "-  {}");
+                        final_result.drain(..2);
+                        final_result.insert_str(0, "- ");
+                        result.push_str(&final_result);
                     }
                     _ => (),
                 }
@@ -128,7 +132,7 @@ mod parsing_tests {
         let data = "[1]";
         let result =
             convert_to_yaml_string(serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "-  1");
+        assert_eq!(result, "- 1");
     }
 
     #[test]
@@ -136,7 +140,7 @@ mod parsing_tests {
         let data = "[1, 2]";
         let result =
             convert_to_yaml_string(serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "-  1\n-  2");
+        assert_eq!(result, "- 1\n- 2");
     }
 
     #[test]
@@ -144,7 +148,7 @@ mod parsing_tests {
         let data = "[1, false, \"a potato\"]";
         let result =
             convert_to_yaml_string(serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "-  1\n-  false\n-  a potato");
+        assert_eq!(result, "- 1\n- false\n- a potato");
     }
 
     #[test]
