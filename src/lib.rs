@@ -80,7 +80,7 @@ fn generate_string_for_array(vector: &Vec<Value>) -> String {
             Value::Bool(_) | Value::Number(_) | Value::String(_) => {
                 convert_to_yaml_string_internal(&value)
             }
-            Value::Array(ref internal_vector) => {
+            Value::Array(_) => {
                 let sub_result = convert_to_yaml_string_internal(&value);
                 let mut final_result = String::from("");
                 // Do some formatting on the internals of the array so that everything lines up
@@ -200,6 +200,16 @@ mod parsing_tests {
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
         assert_eq!(result, "- - a\n  - 2");
     }
+
+    #[test]
+    fn it_handles_multiple_layers_of_nesting() {
+        let data = "[[\"a\", [2]]]";
+        let result =
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
+        assert_eq!(result, "- - a\n  - - 2");
+    }
+
+
 }
 
 #[cfg(test)]
