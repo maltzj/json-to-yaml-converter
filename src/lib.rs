@@ -64,10 +64,24 @@ fn convert_to_yaml_string_internal(serde: &Value) -> String {
             if vector.len() == 0 {
                 result.push_str("[]");
             } else {
-               result.push_str(&generate_string_for_array(&vector));
+                result.push_str(&generate_string_for_array(&vector));
             }
         }
-        _ => (),
+        Value::Object(mapping) => {
+            if mapping.keys().len() == 0 {
+                result.push_str("{}");
+            } else {
+                for (key, value) in mapping {
+                    let mapping_value = match value {
+                        Value::Bool(_) | Value::Number(_) | Value::String(_) => {
+                            convert_to_yaml_string_internal(&value)
+                        }
+                        _ => "".to_string(),
+                    };
+                    result.push_str(&format!("{}: {}", key, mapping_value));
+                }
+            }
+        }
     }
     result.push_str("\n");
     result
@@ -208,8 +222,6 @@ mod parsing_tests {
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
         assert_eq!(result, "- - a\n  - - 2");
     }
-
-
 }
 
 #[cfg(test)]
