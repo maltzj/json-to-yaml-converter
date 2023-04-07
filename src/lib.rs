@@ -19,7 +19,7 @@ fn run(args: impl Iterator<Item = String>) -> Result<String, Box<dyn Error>> {
     }
 
     let deserialized_file = deserialize(&collected_args[1])?;
-    let file_output = convert_to_yaml_string(deserialized_file);
+    let file_output = convert_to_yaml_string(&deserialized_file);
     let writable_file = open_file_for_writing(&collected_args[2])?;
 
     Ok(String::from("TODO: Fill me in"))
@@ -39,13 +39,14 @@ fn open_file_for_writing(file_path: &str) -> Result<File, Box<dyn Error>> {
     Ok(opened_file)
 }
 
-fn convert_to_yaml_string(serde: Value) -> String {
-    convert_to_yaml_string_internal(serde).trim().to_string()
+fn convert_to_yaml_string(serde: &Value) -> String {
+    convert_to_yaml_string_internal(&serde).trim().to_string()
 }
 
-fn convert_to_yaml_string_internal(serde: Value) -> String {
+fn convert_to_yaml_string_internal(serde: &Value) -> String {
     let mut result = String::from("");
     match serde {
+        Value::Null => (),
         Value::Bool(value) => {
             result.push_str(&format!("{}", value));
         }
@@ -60,34 +61,41 @@ fn convert_to_yaml_string_internal(serde: Value) -> String {
             }
         }
         Value::Array(vector) => {
-            for value in vector {
-                match value {
-                    Value::Bool(_) | Value::Number(_) | Value::String(_) => {
-                        let sub_result = convert_to_yaml_string_internal(value);
-                        result.push_str(&format!("- {}", sub_result));
-                    }
-                    Value::Array(vector) => {
-                        // TODO: handle edge case of an array being empty
-                        if (vector.len() == 0) {
-                            result.push_str("[]");
+            if vector.len() == 0 {
+                println!("hitting base case");
+                result.push_str("[]");
+            } else {
+                for value in vector {
+                    let internal_string = match value {
+                        Value::Bool(_) | Value::Number(_) | Value::String(_) => {
+                            convert_to_yaml_string_internal(&value)
                         }
-                        let sub_result = convert_to_yaml_string_internal(value);
-                        let mut final_result = String::from("");
+                        Value::Array(ref internal_vector) => {
+                            let sub_result = convert_to_yaml_string_internal(&value);
+                            let mut final_result = String::from("");
+                            for row in sub_result.split("\n") {
+                                // Split appears to add an empty element at the end, so ignore
+                                // that.
+                                if row.len() != 0 {
+                                    final_result.push_str(&format!("  {}\n", row));
+                                }
+                            }
 
-                        for row in sub_result.split("\n") {
-                            final_result.push_str(&format!("  {}", row));
+                            final_result.drain(..2);
+                            final_result
                         }
-
-                        final_result.drain(..2);
-                        final_result.insert_str(0, "- ");
-                        result.push_str(&final_result);
-                    }
-                    _ => (),
+                        _ => {
+                            panic!("panicking");
+                            "".to_string()
+                        }
+                    };
+                    result.push_str(&format!("- {}", &internal_string));
                 }
             }
         }
         _ => (),
     }
+    println!("Attaching newline");
     result.push_str("\n");
     result
 }
@@ -102,7 +110,7 @@ mod parsing_tests {
     fn it_converts_boolean() {
         let data = "true";
         let result =
-            convert_to_yaml_string(serde_json::from_str(data).expect("Could not parse data"));
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
         assert_eq!(result, "true");
     }
 
@@ -110,7 +118,7 @@ mod parsing_tests {
     fn it_converts_numbers() {
         let data = "12";
         let result =
-            convert_to_yaml_string(serde_json::from_str(data).expect("Could not parse data"));
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
         assert_eq!(result, "12");
     }
 
@@ -118,7 +126,7 @@ mod parsing_tests {
     fn it_converts_strings() {
         let data = "\"test\"";
         let result =
-            convert_to_yaml_string(serde_json::from_str(data).expect("Could not parse data"));
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
         assert_eq!(result, "test");
     }
 
@@ -126,7 +134,7 @@ mod parsing_tests {
     fn it_converts_empty_string() {
         let data = "\"\"";
         let result =
-            convert_to_yaml_string(serde_json::from_str(data).expect("Could not parse data"));
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
         assert_eq!(result, "''");
     }
 
@@ -134,7 +142,7 @@ mod parsing_tests {
     fn it_converts_an_array_with_one_element() {
         let data = "[1]";
         let result =
-            convert_to_yaml_string(serde_json::from_str(data).expect("Could not parse data"));
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
         assert_eq!(result, "- 1");
     }
 
@@ -142,7 +150,7 @@ mod parsing_tests {
     fn it_converts_an_array_with_two_element() {
         let data = "[1, 2]";
         let result =
-            convert_to_yaml_string(serde_json::from_str(data).expect("Could not parse data"));
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
         assert_eq!(result, "- 1\n- 2");
     }
 
@@ -150,7 +158,7 @@ mod parsing_tests {
     fn it_converts_an_array_with_all_primtive_elements() {
         let data = "[1, false, \"a potato\"]";
         let result =
-            convert_to_yaml_string(serde_json::from_str(data).expect("Could not parse data"));
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
         assert_eq!(result, "- 1\n- false\n- a potato");
     }
 
@@ -158,8 +166,32 @@ mod parsing_tests {
     fn it_converts_nested_arrays() {
         let data = "[[1]]";
         let result =
-            convert_to_yaml_string(serde_json::from_str(data).expect("Could not parse data"));
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
         assert_eq!(result, "- - 1");
+    }
+
+    #[test]
+    fn it_converts_empty_arrays() {
+        let data = "[]";
+        let result =
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
+        assert_eq!(result, "[]");
+    }
+
+    #[test]
+    fn it_converts_nested_empty_arrays() {
+        let data = "[[], [], []]";
+        let result =
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
+        assert_eq!(result, "- []\n- []\n- []");
+    }
+
+    #[test]
+    fn it_converts_nested_arrays_with_multiple_values() {
+        let data = "[[\"a\", 2]]";
+        let result =
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
+        assert_eq!(result, "- - a\n  - 2");
     }
 }
 
