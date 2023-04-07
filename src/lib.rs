@@ -66,8 +66,11 @@ fn convert_to_yaml_string_internal(serde: Value) -> String {
                         let sub_result = convert_to_yaml_string_internal(value);
                         result.push_str(&format!("- {}", sub_result));
                     }
-                    Value::Array(_) => {
+                    Value::Array(vector) => {
                         // TODO: handle edge case of an array being empty
+                        if (vector.len() == 0) {
+                            result.push_str("[]");
+                        }
                         let sub_result = convert_to_yaml_string_internal(value);
                         let mut final_result = String::from("");
 
