@@ -40,31 +40,32 @@ fn open_file_for_writing(file_path: &str) -> Result<File, Box<dyn Error>> {
 }
 
 fn convert_to_yaml_string(serde: &Value) -> String {
-    convert_to_yaml_string_internal(&serde).trim().to_string()
+    convert_to_yaml_string_internal(&serde, 0).trim().to_string()
 }
 
-fn convert_to_yaml_string_internal(serde: &Value) -> String {
+fn convert_to_yaml_string_internal(serde: &Value, indentation_level: usize) -> String {
     let mut result = String::from("");
+    let spaces = " ".repeat(indentation_level);
     match serde {
         Value::Null => (),
         Value::Bool(value) => {
-            result.push_str(&format!("{}", value));
+            result.push_str(&format!("{}{}", spaces, value));
         }
         Value::Number(num) => {
-            result.push_str(&format!("{}", num));
+            result.push_str(&format!("{}{}", spaces, num));
         }
         Value::String(string) => {
             if string.len() == 0 {
-                result.push_str("''")
+                result.push_str(&format!("{}''", spaces))
             } else {
-                result.push_str(&format!("{}", string));
+                result.push_str(&format!("{}{}", spaces, string));
             }
         }
         Value::Array(vector) => {
             if vector.len() == 0 {
                 result.push_str("[]");
             } else {
-                result.push_str(&generate_string_for_array(&vector));
+                result.push_str(&generate_string_for_array(&vector, indentation_level));
             }
         }
         Value::Object(mapping) => {
@@ -74,7 +75,7 @@ fn convert_to_yaml_string_internal(serde: &Value) -> String {
                 for (key, value) in mapping {
                     let mapping_value = match value {
                         Value::Bool(_) | Value::Number(_) | Value::String(_) => {
-                            convert_to_yaml_string_internal(&value)
+                            convert_to_yaml_string_internal(&value, 0)
                         }
                         _ => "".to_string(),
                     };
@@ -87,27 +88,16 @@ fn convert_to_yaml_string_internal(serde: &Value) -> String {
     result
 }
 
-fn generate_string_for_array(vector: &Vec<Value>) -> String {
+fn generate_string_for_array(vector: &Vec<Value>, indentation_level: usize) -> String {
     let mut internal_result = String::from("");
-    for value in vector {
+    for (index, value) in vector.iter().enumerate() {
         let internal_string = match value {
             Value::Bool(_) | Value::Number(_) | Value::String(_) => {
-                convert_to_yaml_string_internal(&value)
+                convert_to_yaml_string_internal(&value, 0)
             }
             Value::Array(_) => {
-                let sub_result = convert_to_yaml_string_internal(&value);
-                let mut final_result = String::from("");
-                // Do some formatting on the internals of the array so that everything lines up
-                // nicely.
-                for row in sub_result.split("\n") {
-                    // Split appears to add an empty element at the end, so ignore
-                    // that.
-                    if row.len() != 0 {
-                        final_result.push_str(&format!("  {}\n", row));
-                    }
-                }
-
-                final_result.drain(..2);
+                let sub_result = convert_to_yaml_string_internal(&value, indentation_level + 2);
+                let mut final_result = String::from(sub_result);
                 final_result
             }
             _ => {
@@ -115,7 +105,13 @@ fn generate_string_for_array(vector: &Vec<Value>) -> String {
                 "".to_string()
             }
         };
-        internal_result.push_str(&format!("- {}", &internal_string));
+        if index != 0 {
+            let spaces = " ".repeat(indentation_level);
+            internal_result.push_str(&format!("{}- {}", spaces, &internal_string));
+        } else {
+            internal_result.push_str(&format!("- {}", &internal_string));
+        }
+
     }
 
     internal_result
@@ -217,10 +213,10 @@ mod parsing_tests {
 
     #[test]
     fn it_handles_multiple_layers_of_nesting() {
-        let data = "[[\"a\", [2]]]";
+        let data = "[[\"a\", [2, 3]]]";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "- - a\n  - - 2");
+        assert_eq!(result, "- - a\n  - - 2\n    - 3");
     }
 }
 
