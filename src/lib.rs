@@ -1,5 +1,6 @@
 extern crate tempdir;
 
+use serde_json::Value;
 use std::error::Error;
 use std::fs::File;
 use std::io;
@@ -11,7 +12,7 @@ mod conversion;
 // First order of operations: write out as one big string
 // Next step: create internal yaml graph structure
 
-fn run(args: impl Iterator<Item = String>) -> Result<String, Box<dyn Error>> {
+pub fn run(args: impl Iterator<Item = String>) -> Result<String, Box<dyn Error>> {
     let collected_args: Vec<String> = args.collect();
 
     if collected_args.len() != 3 {
@@ -20,7 +21,8 @@ fn run(args: impl Iterator<Item = String>) -> Result<String, Box<dyn Error>> {
 
     let deserialized_file = deserialize(&collected_args[1])?;
     let file_output = conversion::convert_to_yaml_string(&deserialized_file);
-    let writable_file = open_file_for_writing(&collected_args[2])?;
+    let mut writable_file = open_file_for_writing(&collected_args[2])?;
+    writable_file.write_all(file_output.as_bytes()).expect("Something broke while writing our output file");
 
     Ok(String::from("Everything worked"))
 }
