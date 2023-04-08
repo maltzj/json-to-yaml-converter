@@ -64,7 +64,6 @@ fn convert_to_yaml_string_internal(serde: &Value, indentation_level: usize) -> S
             }
         }
         Value::Array(vector) => {
-            // TODO: Need to generate tests for arrays of objects
             if vector.len() == 0 {
                 result.push_str("[]");
             } else {
@@ -75,16 +74,13 @@ fn convert_to_yaml_string_internal(serde: &Value, indentation_level: usize) -> S
             if mapping.keys().len() == 0 {
                 result.push_str("{}");
             } else {
+                let mut i = 0;
                 for (key, value) in mapping {
+                    let mut is_scalar = false;
                     let mapping_value = match value {
                         Value::Bool(_) | Value::Number(_) | Value::String(_) => {
-                            result.push_str(&format!(
-                                "{}{}: {}",
-                                spaces,
-                                key,
-                                convert_to_yaml_string_internal(&value, 0)
-                            ));
-                            continue;
+                            is_scalar = true;
+                            convert_to_yaml_string_internal(&value, indentation_level + 2)
                         }
                         Value::Object(internal_object) => {
                             convert_to_yaml_string_internal(&value, indentation_level + 2)
@@ -95,17 +91,38 @@ fn convert_to_yaml_string_internal(serde: &Value, indentation_level: usize) -> S
                         _ => "".to_string(),
                     };
 
-                    if mapping_value.trim() == "{}" || mapping_value.trim() == "[]" {
-                        result.push_str(&format!("{}: {}", key, mapping_value.trim()));
+
+                    let newline_to_add = if i == mapping.keys().len() - 1 {
+                        ""
+                    } else {
+                        "\n"
+                    };
+                    
+                    // Scalars are rendered inline vs multi-item arrays and objects, which are
+                    // rendered with another level of indentation.  When checking these values, we
+                    // trim + re-add our own newline to deal with cases where we would create
+                    // multiple newlines (like having a single-element object within a
+                    // single-element array.
+                    if is_scalar || mapping_value.trim() == "{}" || mapping_value.trim() == "[]" {
+                        let spaces_to_use = if i == 0 { "" } else { &spaces };
+                        result.push_str(&format!(
+                            "{}{}: {}{}",
+                            spaces_to_use,
+                            key,
+                            mapping_value.trim(),
+                            newline_to_add
+                        ));
                     } else {
                         let extra_spaces = " ".repeat(indentation_level + 2);
                         result.push_str(&format!(
-                            "{}:\n{}{}",
+                            "{}:\n{}{}{}",
                             key,
                             extra_spaces,
-                            mapping_value.trim()
+                            mapping_value.trim(),
+                            newline_to_add
                         ));
                     }
+                    i += 1
                 }
             }
         }
@@ -122,14 +139,14 @@ fn generate_string_for_array(vector: &Vec<Value>, indentation_level: usize) -> S
             Value::Bool(_) | Value::Number(_) | Value::String(_) => {
                 convert_to_yaml_string_internal(&value, 0)
             }
-            Value::Array(_) => {
+            Value::Array(_) => convert_to_yaml_string_internal(&value, indentation_level + 2),
+            Value::Object(mapping) => {
                 convert_to_yaml_string_internal(&value, indentation_level + 2)
             }
-            Value::Object(mapping) => {
-                panic!("not done just yet");
-                "".to_string()
-            }
         };
+        // Don't indent for index = 0 because we assume that is taken care of by any upper levels.
+        // I'm also pretty convinced there's an edge-case in here around multiple newlines getting
+        // rendered, but I just haven't found it yet :\.
         if index != 0 {
             let spaces = " ".repeat(indentation_level);
             internal_result.push_str(&format!("{}- {}", spaces, &internal_string));
@@ -297,6 +314,14 @@ mod parsing_tests {
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
         assert_eq!(result, "a:\n  - key: 1\n  - c");
+    }
+
+    #[test]
+    fn it_works_with_a_two_element_object_in_an_array() {
+        let data = "[{\"a\": 1, \"c\": 2}]";
+        let result =
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
+        assert_eq!(result, "- a: 1\n  c: 2");
     }
 }
 
