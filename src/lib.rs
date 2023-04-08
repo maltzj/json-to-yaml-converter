@@ -40,7 +40,9 @@ fn open_file_for_writing(file_path: &str) -> Result<File, Box<dyn Error>> {
 }
 
 fn convert_to_yaml_string(serde: &Value) -> String {
-    convert_to_yaml_string_internal(&serde, 0).trim().to_string()
+    convert_to_yaml_string_internal(&serde, 0)
+        .trim()
+        .to_string()
 }
 
 fn convert_to_yaml_string_internal(serde: &Value, indentation_level: usize) -> String {
@@ -49,19 +51,20 @@ fn convert_to_yaml_string_internal(serde: &Value, indentation_level: usize) -> S
     match serde {
         Value::Null => (),
         Value::Bool(value) => {
-            result.push_str(&format!("{}{}", spaces, value));
+            result.push_str(&format!("{}", value));
         }
         Value::Number(num) => {
-            result.push_str(&format!("{}{}", spaces, num));
+            result.push_str(&format!("{}", num));
         }
         Value::String(string) => {
             if string.len() == 0 {
-                result.push_str(&format!("{}''", spaces))
+                result.push_str(&format!("''"))
             } else {
-                result.push_str(&format!("{}{}", spaces, string));
+                result.push_str(&format!("{}", string));
             }
         }
         Value::Array(vector) => {
+            // TODO: Need to generate tests for arrays of objects
             if vector.len() == 0 {
                 result.push_str("[]");
             } else {
@@ -75,11 +78,34 @@ fn convert_to_yaml_string_internal(serde: &Value, indentation_level: usize) -> S
                 for (key, value) in mapping {
                     let mapping_value = match value {
                         Value::Bool(_) | Value::Number(_) | Value::String(_) => {
-                            convert_to_yaml_string_internal(&value, 0)
+                            result.push_str(&format!(
+                                "{}{}: {}",
+                                spaces,
+                                key,
+                                convert_to_yaml_string_internal(&value, 0)
+                            ));
+                            continue;
+                        }
+                        Value::Object(internal_object) => {
+                            convert_to_yaml_string_internal(&value, indentation_level + 2)
+                        }
+                        Value::Array(internal_vector) => {
+                            convert_to_yaml_string_internal(&value, indentation_level + 2)
                         }
                         _ => "".to_string(),
                     };
-                    result.push_str(&format!("{}: {}", key, mapping_value));
+
+                    if mapping_value.trim() == "{}" || mapping_value.trim() == "[]" {
+                        result.push_str(&format!("{}: {}", key, mapping_value.trim()));
+                    } else {
+                        let extra_spaces = " ".repeat(indentation_level + 2);
+                        result.push_str(&format!(
+                            "{}:\n{}{}",
+                            key,
+                            extra_spaces,
+                            mapping_value.trim()
+                        ));
+                    }
                 }
             }
         }
@@ -92,16 +118,15 @@ fn generate_string_for_array(vector: &Vec<Value>, indentation_level: usize) -> S
     let mut internal_result = String::from("");
     for (index, value) in vector.iter().enumerate() {
         let internal_string = match value {
+            Value::Null => "".to_string(),
             Value::Bool(_) | Value::Number(_) | Value::String(_) => {
                 convert_to_yaml_string_internal(&value, 0)
             }
             Value::Array(_) => {
-                let sub_result = convert_to_yaml_string_internal(&value, indentation_level + 2);
-                let mut final_result = String::from(sub_result);
-                final_result
+                convert_to_yaml_string_internal(&value, indentation_level + 2)
             }
-            _ => {
-                panic!("panicking");
+            Value::Object(mapping) => {
+                panic!("not done just yet");
                 "".to_string()
             }
         };
@@ -111,7 +136,6 @@ fn generate_string_for_array(vector: &Vec<Value>, indentation_level: usize) -> S
         } else {
             internal_result.push_str(&format!("- {}", &internal_string));
         }
-
     }
 
     internal_result
@@ -217,6 +241,62 @@ mod parsing_tests {
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
         assert_eq!(result, "- - a\n  - - 2\n    - 3");
+    }
+
+    #[test]
+    fn it_maps_objects_to_scalars() {
+        let data = "{\"a\": 1}";
+        let result =
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
+        assert_eq!(result, "a: 1");
+    }
+
+    #[test]
+    fn it_maps_empty_objects() {
+        let data = "{}";
+        let result =
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
+        assert_eq!(result, "{}");
+    }
+
+    #[test]
+    fn it_maps_objects_to_empty_objects() {
+        let data = "{\"a\": {}}";
+        let result =
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
+        assert_eq!(result, "a: {}");
+    }
+
+    #[test]
+    fn it_maps_objects_to_nested_objects() {
+        let data = "{\"a\": {\"b\": 2}}";
+        let result =
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
+        assert_eq!(result, "a:\n  b: 2");
+    }
+
+    #[test]
+    fn it_maps_objects_to_multiple_nested_objects() {
+        let data = "{\"a\": {\"b\": 2, \"c\": 3}}";
+        let result =
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
+        assert_eq!(result, "a:\n  b: 2\n  c: 3");
+    }
+
+    #[test]
+    fn it_maps_objects_to_arrays() {
+        let data = "{\"a\": [\"b\", \"c\"]}";
+        let result =
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
+        assert_eq!(result, "a:\n  - b\n  - c");
+    }
+
+    #[test]
+    fn it_maps_nested_objects_and_arrays() {
+        let data = "{\"a\": [{\"key\": 1}, \"c\"]}";
+        let result =
+            convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
+        assert_eq!(result, "a:\n  - key: 1\n  - c");
     }
 }
 
