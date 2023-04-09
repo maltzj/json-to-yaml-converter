@@ -3,26 +3,88 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 enum Tag {
-    LocalTag(String),
-    GlobalTag(String),
+    Null,
+    Boolean,
+    String,
+    Integer,
+    Float,
+    Sequence,
+    Mapping,
+    Custom(String),
 }
 
 enum NodeType {
-    SequenceNode(Vec<NodeType>),
-    MappingNode(HashMap<String, NodeType>),
-    ScalarNode(String) 
+    SequenceNode(Vec<YAMLNode>),
+    MappingNode(HashMap<String, YAMLNode>),
+    ScalarNode(String),
 }
 
-struct YamlNode {
-    tags: Vec<Tag>,
-    nodeType: NodeType,
+struct YAMLNode {
+    tag: Tag,
+    node_type: NodeType,
 }
 
 pub fn convert_to_yaml_string(serde: &Value) -> String {
-    let mut result_string = convert_to_yaml_string_internal(&serde, 0).trim().to_string();
+    let mut result_string = convert_to_yaml_string_internal(&serde, 0)
+        .trim()
+        .to_string();
     result_string.insert_str(0, "---\n");
     result_string.push_str("\n");
     result_string
+}
+
+fn convert_to_internal_yaml_representation(serde: &Value) -> YAMLNode {
+    match serde {
+        Value::Null => {
+            YAMLNode {
+                tag: Tag::Null,
+                node_type: NodeType::ScalarNode("".to_string()),
+            }
+        }
+        Value::Bool(value) => {
+            YAMLNode {
+                tag: Tag::Boolean,
+                node_type: NodeType::ScalarNode(format!("{}", value)),
+            }
+        }
+        Value::Number(number) => {
+
+            YAMLNode {
+                tag: if number.is_f64() { Tag::Float} else {Tag::Integer}, // TODO: handle floats and ints.
+                node_type: NodeType::ScalarNode(format!("{}", number)),
+            }
+        }
+        Value::String(string) => {
+            YAMLNode {
+                tag: Tag::String,
+                node_type: NodeType::ScalarNode(string.clone()),
+            }
+        }
+        Value::Array(elements) => {
+            let mut elements_vector = Vec::new();
+            
+            for element in elements {
+               elements_vector.push(convert_to_internal_yaml_representation(element));  
+            }
+            YAMLNode {
+                tag: Tag::Sequence,
+                node_type: NodeType::SequenceNode(elements_vector),
+            }
+        }
+        Value::Object(mapping) => {
+            let mut elements_mapping = HashMap::new();
+
+            // TODO: does either standard have an opinion about duplicate keys?
+            for (key, value) in mapping {
+                elements_mapping.insert(key.clone(), convert_to_internal_yaml_representation(value));
+            }
+
+            YAMLNode {
+                tag: Tag::Mapping,
+                node_type: NodeType::MappingNode(elements_mapping),
+            }
+        }
+    }
 }
 
 fn convert_to_yaml_string_internal(serde: &Value, indentation_level: usize) -> String {
@@ -62,22 +124,21 @@ fn convert_to_yaml_string_internal(serde: &Value, indentation_level: usize) -> S
                             is_scalar = true;
                             convert_to_yaml_string_internal(&value, indentation_level + 2)
                         }
-                        Value::Object(internal_object) => {
+                        Value::Object(_) => {
                             convert_to_yaml_string_internal(&value, indentation_level + 2)
                         }
-                        Value::Array(internal_vector) => {
+                        Value::Array(_) => {
                             convert_to_yaml_string_internal(&value, indentation_level + 2)
                         }
                         _ => "".to_string(),
                     };
-
 
                     let newline_to_add = if i == mapping.keys().len() - 1 {
                         ""
                     } else {
                         "\n"
                     };
-                    
+
                     // Scalars are rendered inline vs multi-item arrays and objects, which are
                     // rendered with another level of indentation.  When checking these values, we
                     // trim + re-add our own newline to deal with cases where we would create
@@ -120,7 +181,7 @@ fn generate_string_for_array(vector: &Vec<Value>, indentation_level: usize) -> S
                 convert_to_yaml_string_internal(&value, 0)
             }
             Value::Array(_) => convert_to_yaml_string_internal(&value, indentation_level + 2),
-            Value::Object(mapping) => {
+            Value::Object(_) => {
                 convert_to_yaml_string_internal(&value, indentation_level + 2)
             }
         };
@@ -303,11 +364,11 @@ mod parsing_tests {
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
         assert_contents_match(&result, "- a: 1\n  c: 2");
     }
-    
+
     fn assert_contents_match(actual: &str, expected: &str) -> () {
         let mut result_with_prefix_and_suffix = expected.trim().to_string();
         result_with_prefix_and_suffix.push_str("\n");
-        result_with_prefix_and_suffix.insert_str(0, "---\n"); 
-        assert_eq!(actual, result_with_prefix_and_suffix); 
+        result_with_prefix_and_suffix.insert_str(0, "---\n");
+        assert_eq!(actual, result_with_prefix_and_suffix);
     }
 }
