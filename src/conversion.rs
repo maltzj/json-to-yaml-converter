@@ -1,8 +1,24 @@
 use serde_json;
 use serde_json::Value;
+use std::collections::HashMap;
+
+enum Tag {
+    LocalTag(String),
+    GlobalTag(String),
+}
+
+enum NodeType {
+    SequenceNode(Vec<NodeType>),
+    MappingNode(HashMap<String, NodeType>),
+    ScalarNode(String) 
+}
+
+struct YamlNode {
+    tags: Vec<Tag>,
+    nodeType: NodeType,
+}
 
 pub fn convert_to_yaml_string(serde: &Value) -> String {
-    // TODO: I really should add a --- directive up top, but that's not strictly necessary.
     let mut result_string = convert_to_yaml_string_internal(&serde, 0).trim().to_string();
     result_string.insert_str(0, "---\n");
     result_string.push_str("\n");
