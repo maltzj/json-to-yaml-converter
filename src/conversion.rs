@@ -112,7 +112,7 @@ fn convert_yaml_node_to_string(serde: &YAMLNode, indentation_level: usize) -> St
     let mut result = String::from("");
     let spaces = " ".repeat(indentation_level);
     match &serde.node_type {
-        NodeType::NullNode() => (),
+        NodeType::NullNode() => return result,
         NodeType::BooleanNode(value) => {
             result.push_str(&format!("{}", value));
         }
@@ -161,7 +161,7 @@ fn convert_yaml_node_to_string(serde: &YAMLNode, indentation_level: usize) -> St
                         NodeType::SequenceNode(_) => {
                             convert_yaml_node_to_string(&value, indentation_level + 2)
                         }
-                        NodeType::NullNode() => "".to_string(),
+                        NodeType::NullNode() => continue,
                         NodeType::CustomScalarNode(_) => todo!()
                     };
 
@@ -209,7 +209,7 @@ fn generate_string_for_array(vector: &Vec<YAMLNode>, indentation_level: usize) -
     let mut internal_result = String::from("");
     for (index, value) in vector.iter().enumerate() {
         let internal_string = match value.node_type {
-            NodeType::NullNode() => "".to_string(),
+            NodeType::NullNode() => continue,
             NodeType::BooleanNode(_)
             | NodeType::SignedIntegerNode(_)
             | NodeType::UnsignedIntegerNode(_)
