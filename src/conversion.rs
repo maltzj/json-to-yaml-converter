@@ -1,6 +1,6 @@
 use serde_json;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 enum Tag {
     Null,
@@ -19,7 +19,7 @@ enum NodeType {
     // hashing + equality for nodes, which is not immediately necessary since JSON can only have
     // String-typed keys.  If I ever get around to building a YAML parser frontend that will need
     // to change!
-    MappingNode(HashMap<String, YAMLNode>),
+    MappingNode(BTreeMap<String, YAMLNode>),
     BooleanNode(bool),
     StringNode(String),
     SignedIntegerNode(i64),
@@ -92,7 +92,7 @@ fn convert_to_internal_yaml_representation(serde: &Value) -> YAMLNode {
             }
         }
         Value::Object(mapping) => {
-            let mut elements_mapping = HashMap::new();
+            let mut elements_mapping = BTreeMap::new();
 
             // TODO: does either standard have an opinion about duplicate keys?
             for (key, value) in mapping {
