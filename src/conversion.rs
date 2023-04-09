@@ -15,56 +15,76 @@ enum Tag {
 
 enum NodeType {
     SequenceNode(Vec<YAMLNode>),
+    // TODO: This actually should be a map of YAMLNode -> YAMLNode, but that means implementing
+    // hashing + equality for nodes, which is not immediately necessary since JSON can only have
+    // String-typed keys.  If I ever get around to building a YAML parser frontend that will need
+    // to change!
     MappingNode(HashMap<String, YAMLNode>),
-    ScalarNode(String),
+    BooleanNode(bool),
+    StringNode(String),
+    SignedIntegerNode(i64),
+    UnsignedIntegerNode(u64),
+    FloatNode(f64),
+    NullNode(),
+    CustomScalarNode(String),
 }
 
+// TODO: This idea of "maintain a tag + node type" feels a little unnecessary for most scalar
+// types, but may become necessary if multiple tag types get supported.  There's probably better
+// ways to handle this, but it's Fine For Now.
 struct YAMLNode {
     tag: Tag,
     node_type: NodeType,
 }
 
 pub fn convert_to_yaml_string(serde: &Value) -> String {
-    let mut result_string = convert_to_yaml_string_internal(&serde, 0)
-        .trim()
-        .to_string();
+    let mut result_string = convert_to_yaml_string_internal(&serde).trim().to_string();
     result_string.insert_str(0, "---\n");
     result_string.push_str("\n");
     result_string
 }
 
+fn convert_to_yaml_string_internal(serde: &Value) -> String {
+    let yaml_representation = convert_to_internal_yaml_representation(serde);
+    convert_yaml_node_to_string(&yaml_representation, 0)
+}
+
 fn convert_to_internal_yaml_representation(serde: &Value) -> YAMLNode {
     match serde {
-        Value::Null => {
-            YAMLNode {
-                tag: Tag::Null,
-                node_type: NodeType::ScalarNode("".to_string()),
-            }
-        }
-        Value::Bool(value) => {
-            YAMLNode {
-                tag: Tag::Boolean,
-                node_type: NodeType::ScalarNode(format!("{}", value)),
-            }
-        }
+        Value::Null => YAMLNode {
+            tag: Tag::Null,
+            node_type: NodeType::NullNode(),
+        },
+        Value::Bool(value) => YAMLNode {
+            tag: Tag::Boolean,
+            node_type: NodeType::BooleanNode(*value),
+        },
         Value::Number(number) => {
-
-            YAMLNode {
-                tag: if number.is_f64() { Tag::Float} else {Tag::Integer}, // TODO: handle floats and ints.
-                node_type: NodeType::ScalarNode(format!("{}", number)),
+            if number.is_f64() {
+                YAMLNode {
+                    tag: Tag::Float,
+                    node_type: NodeType::FloatNode(number.as_f64().unwrap()),
+                }
+            } else {
+                YAMLNode {
+                    tag: Tag::Integer,
+                    node_type: if number.is_i64() {
+                        NodeType::SignedIntegerNode(number.as_i64().unwrap())
+                    } else {
+                        NodeType::UnsignedIntegerNode(number.as_u64().unwrap())
+                    },
+                }
             }
         }
-        Value::String(string) => {
-            YAMLNode {
-                tag: Tag::String,
-                node_type: NodeType::ScalarNode(string.clone()),
-            }
-        }
+        Value::String(string) => YAMLNode {
+            tag: Tag::String,
+            node_type: NodeType::StringNode(string.clone()),
+        },
         Value::Array(elements) => {
             let mut elements_vector = Vec::new();
-            
+
             for element in elements {
-               elements_vector.push(convert_to_internal_yaml_representation(element));  
+                elements_vector.push(convert_to_internal_yaml_representation(element));
             }
             YAMLNode {
                 tag: Tag::Sequence,
@@ -76,7 +96,8 @@ fn convert_to_internal_yaml_representation(serde: &Value) -> YAMLNode {
 
             // TODO: does either standard have an opinion about duplicate keys?
             for (key, value) in mapping {
-                elements_mapping.insert(key.clone(), convert_to_internal_yaml_representation(value));
+                elements_mapping
+                    .insert(key.clone(), convert_to_internal_yaml_representation(value));
             }
 
             YAMLNode {
@@ -87,50 +108,61 @@ fn convert_to_internal_yaml_representation(serde: &Value) -> YAMLNode {
     }
 }
 
-fn convert_to_yaml_string_internal(serde: &Value, indentation_level: usize) -> String {
+fn convert_yaml_node_to_string(serde: &YAMLNode, indentation_level: usize) -> String {
     let mut result = String::from("");
     let spaces = " ".repeat(indentation_level);
-    match serde {
-        Value::Null => (),
-        Value::Bool(value) => {
+    match &serde.node_type {
+        NodeType::NullNode() => (),
+        NodeType::BooleanNode(value) => {
             result.push_str(&format!("{}", value));
         }
-        Value::Number(num) => {
+        NodeType::FloatNode(num) => {
             result.push_str(&format!("{}", num));
         }
-        Value::String(string) => {
+        NodeType::UnsignedIntegerNode(num) => {
+            result.push_str(&format!("{}", num));
+        }
+        NodeType::SignedIntegerNode(num) => {
+            result.push_str(&format!("{}", num));
+        }
+        NodeType::StringNode(string) => {
             if string.len() == 0 {
                 result.push_str(&format!("''"))
             } else {
                 result.push_str(&format!("{}", string));
             }
         }
-        Value::Array(vector) => {
+        NodeType::SequenceNode(vector) => {
             if vector.len() == 0 {
                 result.push_str("[]");
             } else {
                 result.push_str(&generate_string_for_array(&vector, indentation_level));
             }
         }
-        Value::Object(mapping) => {
+        NodeType::MappingNode(mapping) => {
             if mapping.keys().len() == 0 {
                 result.push_str("{}");
             } else {
                 let mut i = 0;
                 for (key, value) in mapping {
                     let mut is_scalar = false;
-                    let mapping_value = match value {
-                        Value::Bool(_) | Value::Number(_) | Value::String(_) => {
+                    let mapping_value = match value.node_type {
+                        NodeType::FloatNode(_)
+                        | NodeType::UnsignedIntegerNode(_)
+                        | NodeType::SignedIntegerNode(_)
+                        | NodeType::StringNode(_)
+                        | NodeType::BooleanNode(_) => {
                             is_scalar = true;
-                            convert_to_yaml_string_internal(&value, indentation_level + 2)
+                            convert_yaml_node_to_string(&value, indentation_level + 2)
                         }
-                        Value::Object(_) => {
-                            convert_to_yaml_string_internal(&value, indentation_level + 2)
+                        NodeType::MappingNode(_) => {
+                            convert_yaml_node_to_string(&value, indentation_level + 2)
                         }
-                        Value::Array(_) => {
-                            convert_to_yaml_string_internal(&value, indentation_level + 2)
+                        NodeType::SequenceNode(_) => {
+                            convert_yaml_node_to_string(&value, indentation_level + 2)
                         }
-                        _ => "".to_string(),
+                        NodeType::NullNode() => "".to_string(),
+                        NodeType::CustomScalarNode(_) => todo!()
                     };
 
                     let newline_to_add = if i == mapping.keys().len() - 1 {
@@ -167,23 +199,25 @@ fn convert_to_yaml_string_internal(serde: &Value, indentation_level: usize) -> S
                 }
             }
         }
+        NodeType::CustomScalarNode(_) => todo!()
     }
     result.push_str("\n");
     result
 }
 
-fn generate_string_for_array(vector: &Vec<Value>, indentation_level: usize) -> String {
+fn generate_string_for_array(vector: &Vec<YAMLNode>, indentation_level: usize) -> String {
     let mut internal_result = String::from("");
     for (index, value) in vector.iter().enumerate() {
-        let internal_string = match value {
-            Value::Null => "".to_string(),
-            Value::Bool(_) | Value::Number(_) | Value::String(_) => {
-                convert_to_yaml_string_internal(&value, 0)
-            }
-            Value::Array(_) => convert_to_yaml_string_internal(&value, indentation_level + 2),
-            Value::Object(_) => {
-                convert_to_yaml_string_internal(&value, indentation_level + 2)
-            }
+        let internal_string = match value.node_type {
+            NodeType::NullNode() => "".to_string(),
+            NodeType::BooleanNode(_)
+            | NodeType::SignedIntegerNode(_)
+            | NodeType::UnsignedIntegerNode(_)
+            | NodeType::FloatNode(_)
+            | NodeType::StringNode(_) => convert_yaml_node_to_string(&value, 0),
+            NodeType::SequenceNode(_) => convert_yaml_node_to_string(&value, indentation_level + 2),
+            NodeType::MappingNode(_) => convert_yaml_node_to_string(&value, indentation_level + 2),
+            NodeType::CustomScalarNode(_) => todo!()
         };
         // Don't indent for index = 0 because we assume that is taken care of by any upper levels.
         // I'm also pretty convinced there's an edge-case in here around multiple newlines getting
