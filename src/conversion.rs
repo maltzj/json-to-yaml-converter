@@ -4,6 +4,7 @@ use serde_json::Value;
 pub fn convert_to_yaml_string(serde: &Value) -> String {
     // TODO: I really should add a --- directive up top, but that's not strictly necessary.
     let mut result_string = convert_to_yaml_string_internal(&serde, 0).trim().to_string();
+    result_string.insert_str(0, "---\n");
     result_string.push_str("\n");
     result_string
 }
@@ -132,7 +133,7 @@ mod parsing_tests {
         let data = "true";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "true\n");
+        assert_contents_match(&result, "true");
     }
 
     #[test]
@@ -140,7 +141,7 @@ mod parsing_tests {
         let data = "12";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "12\n");
+        assert_contents_match(&result, "12");
     }
 
     #[test]
@@ -148,7 +149,7 @@ mod parsing_tests {
         let data = "\"test\"";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "test\n");
+        assert_contents_match(&result, "test");
     }
 
     #[test]
@@ -156,7 +157,7 @@ mod parsing_tests {
         let data = "\"\"";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "''\n");
+        assert_contents_match(&result, "''");
     }
 
     #[test]
@@ -164,7 +165,7 @@ mod parsing_tests {
         let data = "[1]";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "- 1\n");
+        assert_contents_match(&result, "- 1");
     }
 
     #[test]
@@ -172,7 +173,7 @@ mod parsing_tests {
         let data = "[1, 2]";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "- 1\n- 2\n");
+        assert_contents_match(&result, "- 1\n- 2");
     }
 
     #[test]
@@ -180,7 +181,7 @@ mod parsing_tests {
         let data = "[1, false, \"a potato\"]";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "- 1\n- false\n- a potato\n");
+        assert_contents_match(&result, "- 1\n- false\n- a potato");
     }
 
     #[test]
@@ -188,7 +189,7 @@ mod parsing_tests {
         let data = "[[1]]";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "- - 1\n");
+        assert_contents_match(&result, "- - 1");
     }
 
     #[test]
@@ -196,7 +197,7 @@ mod parsing_tests {
         let data = "[]";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "[]\n");
+        assert_contents_match(&result, "[]");
     }
 
     #[test]
@@ -204,7 +205,7 @@ mod parsing_tests {
         let data = "[[], [], []]";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "- []\n- []\n- []\n");
+        assert_contents_match(&result, "- []\n- []\n- []");
     }
 
     #[test]
@@ -212,7 +213,7 @@ mod parsing_tests {
         let data = "[[\"a\", 2]]";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "- - a\n  - 2\n");
+        assert_contents_match(&result, "- - a\n  - 2");
     }
 
     #[test]
@@ -220,7 +221,7 @@ mod parsing_tests {
         let data = "[[\"a\", [2, 3]]]";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "- - a\n  - - 2\n    - 3\n");
+        assert_contents_match(&result, "- - a\n  - - 2\n    - 3");
     }
 
     #[test]
@@ -228,7 +229,7 @@ mod parsing_tests {
         let data = "{\"a\": 1}";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "a: 1\n");
+        assert_contents_match(&result, "a: 1");
     }
 
     #[test]
@@ -236,7 +237,7 @@ mod parsing_tests {
         let data = "{}";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "{}\n");
+        assert_contents_match(&result, "{}");
     }
 
     #[test]
@@ -244,7 +245,7 @@ mod parsing_tests {
         let data = "{\"a\": {}}";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "a: {}\n");
+        assert_contents_match(&result, "a: {}");
     }
 
     #[test]
@@ -252,7 +253,7 @@ mod parsing_tests {
         let data = "{\"a\": {\"b\": 2}}";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "a:\n  b: 2\n");
+        assert_contents_match(&result, "a:\n  b: 2");
     }
 
     #[test]
@@ -260,7 +261,7 @@ mod parsing_tests {
         let data = "{\"a\": {\"b\": 2, \"c\": 3}}";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "a:\n  b: 2\n  c: 3\n");
+        assert_contents_match(&result, "a:\n  b: 2\n  c: 3");
     }
 
     #[test]
@@ -268,7 +269,7 @@ mod parsing_tests {
         let data = "{\"a\": [\"b\", \"c\"]}";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "a:\n  - b\n  - c\n");
+        assert_contents_match(&result, "a:\n  - b\n  - c");
     }
 
     #[test]
@@ -276,7 +277,7 @@ mod parsing_tests {
         let data = "{\"a\": [{\"key\": 1}, \"c\"]}";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "a:\n  - key: 1\n  - c\n");
+        assert_contents_match(&result, "a:\n  - key: 1\n  - c");
     }
 
     #[test]
@@ -284,6 +285,13 @@ mod parsing_tests {
         let data = "[{\"a\": 1, \"c\": 2}]";
         let result =
             convert_to_yaml_string(&serde_json::from_str(data).expect("Could not parse data"));
-        assert_eq!(result, "- a: 1\n  c: 2\n");
+        assert_contents_match(&result, "- a: 1\n  c: 2");
+    }
+    
+    fn assert_contents_match(actual: &str, expected: &str) -> () {
+        let mut result_with_prefix_and_suffix = expected.trim().to_string();
+        result_with_prefix_and_suffix.push_str("\n");
+        result_with_prefix_and_suffix.insert_str(0, "---\n"); 
+        assert_eq!(actual, result_with_prefix_and_suffix); 
     }
 }
