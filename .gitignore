@@ -2,3 +2,5 @@
 /Cargo.lock
 
 **.swp.*
+test.json
+output.yaml
