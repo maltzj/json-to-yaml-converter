@@ -111,7 +111,7 @@ fn convert_to_internal_yaml_representation(serde: &Value) -> YAMLNode {
 fn convert_yaml_node_to_string(serde: &YAMLNode, indentation_level: usize) -> String {
     let mut result = String::from("");
     let spaces = " ".repeat(indentation_level);
-    match &serde.node_type {
+    match serde.node_type {
         NodeType::NullNode() => return result,
         NodeType::BooleanNode(value) => {
             result.push_str(&format!("{}", value));
